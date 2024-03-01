@@ -30,6 +30,8 @@ Tetris 조각들이 판에 나오게 되는 것을 어떻게 표현할지, 지�
 #include <ctime>
 #include <thread>
 #include <chrono>
+#include <termios.h>
+#include <unistd.h>
 
 using namespace std;
 
@@ -38,7 +40,7 @@ const int height = 15;
 const int width = 20;
 
 //초기화된 테트리스 판
-int board[height][width] = {
+int last_board[height][width] = {
 	{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1},
 	{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
 	{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
@@ -56,26 +58,67 @@ int board[height][width] = {
 	{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}
 };
 
-// 도형 전역변수로 선언
+int next_board[height][width] = {
+	{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1},
+	{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+	{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+	{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+	{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+	{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+	{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+	{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+	{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+	{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+	{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+	{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+	{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+	{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+	{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}
+};
 
+const int num_shapes = 4; // 도형의 개수
+
+// 각 도형의 2D 배열 정의
 int box_1[2][2] = {
-	{1,1},
-	{1,1}
+    {1, 1},
+    {1, 1}
 };
 
 int box_2[1][4] = {
-	{1,1,1,1}
+    {1, 1, 1, 1}
 };
 
 int box_3[2][2] = {
-	{1,0},
-	{1,1}
+    {1, 0},
+    {1, 1}
 };
 
 int box_4[2][3] = {
-	{0,1,0},
-	{1,1,1}
+    {0, 1, 0},
+    {1, 1, 1}
 };
+
+// 모든 도형을 담는 배열
+int boxes[num_shapes][2][4] = {
+    {
+        {1, 1},
+        {1, 1}
+    },
+    {
+        {1, 1, 1, 1}
+    },
+    {
+        {1, 0},
+        {1, 1}
+    },
+    {
+        {0, 1, 0},
+        {1, 1, 1}
+    }
+};
+
+// 나머지 코드...
+
 
 // update 되는 행의 처음 값
 int currow = 1;
@@ -108,134 +151,129 @@ int start_str()
 
 void TetrisWall()
 {
-	system("clear"); // 지우고 새로 생성
+    // system("clear"); // 화면을 지우고 새로 생성
 
-	for (int i=0; i<height; ++i)
-	{
-		for(int j=0; j<width; ++j)
-		{
-			if (board[i][j] == 1) 
-			{
+    for (int i = 0; i < height; ++i)
+    {
+        for (int j = 0; j < width; ++j)
+        {
+            if (next_board[i][j] == 1)
+            {
                 cout << '#';  // 블록이 있는 곳은 #
-            } 
-			else 
-			{
+            }
+            else
+            {
                 cout << ' ';  // 블록이 없는 곳은 공백
             }
-		}
-		cout << '\n'; 
-	}
-}
-
-void clearBoard()
-{
-	for (int i = 1; i+1 < height; ++i)
-    {
-        for (int j = 1; j < width - 1; ++j)
-        {
-            board[i][j] = 0;
         }
+        cout << '\n';
     }
-
 }
 
 void ingbox(int num)
 {
-	switch(num)
-	{
-		case 1:
-			for(int i=0; i<2; ++i)
-			{
-				for(int j=0; j<2; ++j)
-				{
-					if (box_1[i][j] == 1)
-                    {
-                        board[currow + i][width / 2 - 1 + j] = 1;
-                    }
-				}
-			}
-			break;
+    switch (num)
+    {
+    case 1:
+        for (int i = 0; i < 2; ++i)
+        {
+            for (int j = 0; j < 2; ++j)
+            {
+                if (boxes[num - 1][i][j] == 1)
+                {
+                    next_board[currow + i][width / 2 - 1 + j] = 1;
+                }
+            }
+        }
+        break;
 
-		case 2:
-			for(int i=0; i<1; ++i)
-			{
-				for(int j=0; j<4; ++j)
-				{
-					if (box_2[i][j] == 1)
-                    {
-                        board[currow + i + 1][width / 2 - 1 + j - 1] = 1;
-                    }
-				}
-			}
-			break;
+    case 2:
+        for (int i = 0; i < 1; ++i)
+        {
+            for (int j = 0; j < 4; ++j)
+            {
+                if (boxes[num - 1][i][j] == 1)
+                {
+                    next_board[currow + i + 1][width / 2 - 1 + j - 1] = 1;
+                }
+            }
+        }
+        break;
 
-		case 3:
-			for(int i=0; i<2; ++i)
-			{
-				for(int j=0; j<2; ++j)
-				{
-					if (box_3[i][j] == 1)
-					{
-						board[currow + i][width / 2 - 1 + j] = 1;
-					}
-					else
-					{
-						board[currow + i][width / 2 - 1 + j] = 0;
-					}
-				}
-			}
-			break;
+    case 3:
+        for (int i = 0; i < 2; ++i)
+        {
+            for (int j = 0; j < 2; ++j)
+            {
+                if (boxes[num - 1][i][j] == 1)
+                {
+                    next_board[currow + i][width / 2 - 1 + j] = 1;
+                }
+            }
+        }
+        break;
 
-		case 4:
-			for(int i=0; i<2; ++i)
-			{
-				for(int j=0; j<3; ++j)
-				{
-					if (box_4[i][j] == 1)
-					{
-						board[currow + i][width / 2 - 1 + j] = 1;
-					}
-					else
-					{
-						board[currow + i][width / 2 - 1 + j] = 0;
-					} 
-				}
-			}
-			break;
+    case 4:
+        for (int i = 0; i < 2; ++i)
+        {
+            for (int j = 0; j < 3; ++j)
+            {
+                if (boxes[num - 1][i][j] == 1)
+                {
+                    next_board[currow + i][width / 2 - 1 + j] = 1;
+                }
+            }
+        }
+        break;
 	}
 	
 }
 
+bool isBlockOnBottom(int num)
+{
+    // 현재 도형이 바닥에 닿았는지 확인
+    for (int i = 0; i < 2; ++i)
+    {
+        for (int j = 0; j < 4; ++j)
+        {
+            if (boxes[num - 1][i][j] == 1 &&
+                (last_board[currow + i + 1][width / 2 - 1 + j - 1] == 1 ||
+                 next_board[currow + i + 1][width / 2 - 1 + j - 1] == 1))
+            {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
 void updateBoard(int num)
 {
-	// 이전에 적용된 것 초기화
-    clearBoard();
-
-	ingbox(num);
-
-	 // 현재 도형이 바닥에 도달하면
-    if (currow + 2 >= height)
+    // 현재 도형이 바닥에 도달하면
+    if (isBlockOnBottom(num))
     {
-		// 보드에 현재 도형 고정
-		ingbox(num);
+        // 보드에 현재 도형 고정
+        ingbox(num);
 
-		// 이전 도형을 바닥에 고정시킨 상태를 보드에 반영
+        // 이전 도형을 바닥에 고정시킨 상태를 보드에 반영
         for (int i = 1; i + 2 < height; ++i)
         {
             for (int j = 1; j < width - 1; ++j)
             {
-                if (board[i][j] == 1)
+                if (last_board[i][j] == 1)
                 {
-                    board[i][j] = 1;
+                    next_board[i][j] = 1;
                 }
             }
         }
 
-		// 행 위치 초기화
-		currow = 1;
+        // 행 위치 초기화
+        currow = 1;
 
-		// 랜덤으로 도형 내려오기
-		num = rand() % 4 + 1;
+        // 랜덤으로 도형 내려오기
+        num = rand() % 4 + 1;
+        cout << "box_num : " << num;
     }
     else
     {
@@ -243,12 +281,23 @@ void updateBoard(int num)
         ++currow;
     }
 
-	cout << "\n\n\n\n update \n\n\n\n";
-	TetrisWall();
+    cout << "\n\n\n\n update \n\n\n\n";
+    TetrisWall();
 }
 
 
 
+int getch() {
+    struct termios oldt, newt;
+    int ch;
+    tcgetattr(STDIN_FILENO, &oldt);
+    newt = oldt;
+    newt.c_lflag &= ~(ICANON | ECHO);
+    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+    ch = getchar();
+    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+    return ch;
+}
 
 
 
@@ -284,7 +333,7 @@ int main()
 	{
 		// 일정 주기로 내려오는 행
 		updateBoard(box_num);
-		// delay 
+			// delay 
 		this_thread::sleep_for(chrono::seconds(1));
 		// 현재 도형이 바닥에 도달하면
         if (currow + 2 >= height)
@@ -297,10 +346,16 @@ int main()
 			{
 				for (int j = 1; j < width - 1; ++j)
 				{
-					if (board[i][j] == 1)
+					if (last_board[i][j] == 1)
 					{
-						board[i][j] = 1;
+						next_board[i][j] = 1;
 					}
+				}
+			}
+
+			for (int i = 0; i < height; ++i) {
+				for (int j = 0; j < width; ++j) {
+					last_board[i][j] = next_board[i][j];
 				}
 			}
 
